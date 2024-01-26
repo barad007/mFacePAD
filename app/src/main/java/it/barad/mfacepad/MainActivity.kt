@@ -19,6 +19,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import it.barad.mfacepad.databinding.ActivityMainBinding
 import org.opencv.android.OpenCVLoader
+import org.opencv.objdetect.CascadeClassifier
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -51,6 +52,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    private var faceCascadeClassifier: CascadeClassifier? = null
+    lateinit var faceDetector: CascadeClassifier
+    private val fileName = "haarcascade_frontalface_default.xml"
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +74,7 @@ class MainActivity : AppCompatActivity() {
         viewBinding.imageCaptureButton.setOnClickListener { takePhoto() }
         cameraExecutor = Executors.newSingleThreadExecutor()
 
+        // OpenCV initialization
         if (OpenCVLoader.initLocal()) {
             Log.i(TAG, "OpenCV loaded successfully");
         } else {
@@ -75,6 +82,11 @@ class MainActivity : AppCompatActivity() {
             (Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG)).show();
             return;
         }
+
+        // OpenCV faceDetector
+        val filePath =  Utils.getFileFromAssets(this, fileName).absolutePath
+        faceDetector = faceCascadeClassifier?: CascadeClassifier(Utils.createPrivateFile(this, "tmp").apply{writeBytes(File(filePath).readBytes())}.path).also { faceCascadeClassifier = it }
+
 
     }
 

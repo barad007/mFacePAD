@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">mFacePAD</string>
     <string name="take_photo">take_photo</string>
+    <string name="show_photo">show_photo</string>
 </resources>
