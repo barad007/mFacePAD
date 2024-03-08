@@ -4,4 +4,7 @@
     <string name="show_photo">show_photo</string>
     <string name="capture_button_alt">Capture</string>
     <string name="gallery_button_alt">Gallery</string>
+    <string name="camera_switch">Camera switch</string>
+    <string name="go_back">Go back</string>
+    <string name="image_view">ImageView</string>
 </resources>

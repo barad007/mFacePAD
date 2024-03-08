@@ -2,6 +2,7 @@ package it.barad.mfacepad
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
@@ -18,6 +19,7 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import it.barad.mfacepad.Utilities.detectFace
 import it.barad.mfacepad.databinding.ActivityMainBinding
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
@@ -62,10 +64,12 @@ class MainActivity : AppCompatActivity() {
     lateinit var faceDetector: CascadeClassifier
     private val fileName = "haarcascade_frontalface_default.xml"
     private var imgPath: String = ""
-
+    private var cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         viewBinding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(viewBinding.root)
 
@@ -79,6 +83,8 @@ class MainActivity : AppCompatActivity() {
         // Set up the listeners for take photo and video capture buttons
         viewBinding.imageCaptureButton.setOnClickListener { takeFacePhoto() }
         cameraExecutor = Executors.newSingleThreadExecutor()
+        viewBinding.cameraSwitchButton.setOnClickListener { switchCamera() }
+
 
         // OpenCV initialization
         if (OpenCVLoader.initLocal()) {
@@ -101,8 +107,14 @@ class MainActivity : AppCompatActivity() {
         val currentVisibility = viewBinding.photoImageView.visibility
         if (currentVisibility == View.VISIBLE) {
             viewBinding.photoImageView.visibility = View.INVISIBLE
+            viewBinding.bottomTextView.visibility = View.INVISIBLE
+            viewBinding.viewFinder.visibility = View.VISIBLE
+            viewBinding.goBackButton.visibility = View.INVISIBLE
         } else {
             viewBinding.photoImageView.visibility = View.VISIBLE
+            viewBinding.bottomTextView.visibility = View.VISIBLE
+            viewBinding.viewFinder.visibility = View.INVISIBLE
+            viewBinding.goBackButton.visibility = View.VISIBLE
         }
     }
 
@@ -127,39 +139,57 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val msg = "Photo capture succeeded: ${output.savedUri}"
+                    // val msg = "Photo capture succeeded: ${output.savedUri}"
+                    val msg = "Image capture was successful."
                     Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                     Log.d(TAG, msg)
 
 
                     imgPath = output.savedUri!!.path.toString()
+
                     var sampleBitmap = ImgUtils.rotateBitmap(imgPath)
 
-                    // resize
+//                    // resize
                     val sampleMat = Mat(sampleBitmap.width, sampleBitmap.height, CvType.CV_8UC1)
                     Utils.bitmapToMat(sampleBitmap, sampleMat)
-
 //                    val NewWidth = 1024.0
 //                    val NewHeight = (sampleBitmap.height * (NewWidth / sampleBitmap.width))
 //                    Imgproc.resize(sampleMat, sampleMat, Size(NewWidth, NewHeight))
 //                    val faceBmp = Bitmap.createBitmap(sampleMat.width(), sampleMat.height(), Bitmap.Config.ARGB_8888)
 //                    Utils.matToBitmap(sampleMat, faceBmp)
-
-                    // face detection
+//                    // face detection
                     val faceRect = FaceDetection.detect(sampleMat, faceDetector)
-                    var roi = Utilities.crop(sampleMat, faceRect)
-                    val roiBmp = Bitmap.createBitmap(roi.width(), roi.height(), Bitmap.Config.ARGB_8888)
-                    Utils.matToBitmap(roi, roiBmp)
 
-                    viewBinding.photoImageView.visibility = View.VISIBLE
+//                    val faceRect = Utilities.detectFace(imgPath, faceDetector)
+
+                    if (faceRect.toArray().size != 1) {
+                        val msg = "Face not detected. \nTo obtain a high-quality biometric sample, the face must be clearly visible."
+                        Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
+                        Log.d(TAG, msg)
+                    } else {
+                        var roi = Utilities.crop(sampleMat, faceRect)
+                        val roiBmp = Bitmap.createBitmap(roi.width(), roi.height(), Bitmap.Config.ARGB_8888)
+                        Utils.matToBitmap(roi, roiBmp)
+
+                        viewBinding.photoImageView.visibility = View.VISIBLE
+                        viewBinding.goBackButton.visibility = View.VISIBLE
+                        viewBinding.viewFinder.visibility = View.INVISIBLE
 //                    viewBinding.photoImageView.setImageURI(output.savedUri)
-                    viewBinding.photoImageView.setImageBitmap(roiBmp)
+                        viewBinding.photoImageView.setImageBitmap(roiBmp)
+                        viewBinding.bottomTextView.visibility = View.VISIBLE
+                        viewBinding.bottomTextView.text = "score = 0.84"
+
+                    }
+
 
 
                 }
             }
         )
     }
+
+
+
     // This code comes from Google's Getting Started with CameraX manual.
     // https://developer.android.com/codelabs/camerax-getting-started#3
     private fun startCamera() {
@@ -178,7 +208,7 @@ class MainActivity : AppCompatActivity() {
 
             imageCapture = ImageCapture.Builder().build()
 
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+//            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try {
                 cameraProvider.unbindAll()
@@ -190,6 +220,15 @@ class MainActivity : AppCompatActivity() {
             }
 
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun switchCamera() {
+        cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
+            CameraSelector.DEFAULT_FRONT_CAMERA
+        } else {
+            CameraSelector.DEFAULT_BACK_CAMERA
+        }
+        startCamera()
     }
 
     private fun requestPermissions() {
