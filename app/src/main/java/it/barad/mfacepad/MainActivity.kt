@@ -1,16 +1,17 @@
 package it.barad.mfacepad
 
 import android.Manifest
-import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
-import android.provider.MediaStore
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -19,10 +20,13 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import it.barad.mfacepad.databinding.ActivityMainBinding
 import org.opencv.android.OpenCVLoader
+import org.opencv.android.Utils
+import org.opencv.core.CvType
+import org.opencv.core.Mat
+import org.opencv.core.Size
+import org.opencv.imgproc.Imgproc
 import org.opencv.objdetect.CascadeClassifier
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -33,6 +37,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var cameraExecutor: ExecutorService
 
+    // This code comes from Google's Getting Started with CameraX manual.
+    // https://developer.android.com/codelabs/camerax-getting-started#2
     private val activityResultLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions())
@@ -40,7 +46,7 @@ class MainActivity : AppCompatActivity() {
             // Handle Permission granted/rejected
             var permissionGranted = true
             permissions.entries.forEach {
-                if (it.key in REQUIRED_PERMISSIONS && it.value == false)
+                if (it.key in REQUIRED_PERMISSIONS && !it.value)
                     permissionGranted = false
             }
             if (!permissionGranted) {
@@ -55,7 +61,7 @@ class MainActivity : AppCompatActivity() {
     private var faceCascadeClassifier: CascadeClassifier? = null
     lateinit var faceDetector: CascadeClassifier
     private val fileName = "haarcascade_frontalface_default.xml"
-
+    private var imgPath: String = ""
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,7 +77,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Set up the listeners for take photo and video capture buttons
-        viewBinding.imageCaptureButton.setOnClickListener { takePhoto() }
+        viewBinding.imageCaptureButton.setOnClickListener { takeFacePhoto() }
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         // OpenCV initialization
@@ -84,56 +90,26 @@ class MainActivity : AppCompatActivity() {
         }
 
         // OpenCV faceDetector
-        val filePath =  Utils.getFileFromAssets(this, fileName).absolutePath
-        faceDetector = faceCascadeClassifier?: CascadeClassifier(Utils.createPrivateFile(this, "tmp").apply{writeBytes(File(filePath).readBytes())}.path).also { faceCascadeClassifier = it }
+        val filePath =  Utilities.getFileFromAssets(this, fileName).absolutePath
+        faceDetector = faceCascadeClassifier?: CascadeClassifier(Utilities.createPrivateFile(this, "tmp").apply{writeBytes(File(filePath).readBytes())}.path).also { faceCascadeClassifier = it }
 
 
     }
 
-    private fun takePhoto() {
-        val imageCapture = imageCapture ?: return
 
-        val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US)
-            .format(System.currentTimeMillis())
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            if(Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CameraX-Image")
-            }
+    fun toggleImageViewVisibility(view: View) {
+        val currentVisibility = viewBinding.photoImageView.visibility
+        if (currentVisibility == View.VISIBLE) {
+            viewBinding.photoImageView.visibility = View.INVISIBLE
+        } else {
+            viewBinding.photoImageView.visibility = View.VISIBLE
         }
-
-        val outputOptions = ImageCapture.OutputFileOptions
-            .Builder(contentResolver,
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                contentValues)
-            .build()
-
-        imageCapture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(this),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onError(exc: ImageCaptureException) {
-                    Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
-                }
-
-                override fun
-                        onImageSaved(output: ImageCapture.OutputFileResults){
-                    val msg = "Photo capture succeeded: ${output.savedUri}"
-                    Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
-                    Log.d(TAG, msg)
-                }
-            }
-        )
     }
 
-
-    private fun takePhoto2() {
+    private fun takeFacePhoto() {
         val imageCapture = imageCapture ?: return
 
-        val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US)
-            .format(System.currentTimeMillis()) + ".jpg"
-
+        val name = SAMPLE_FILENAME
         val picturesDirectory = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
 
         val photoFile = File(picturesDirectory, name)
@@ -151,16 +127,41 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val msg = "Photo capture succeeded: ${photoFile.absolutePath}"
+                    val msg = "Photo capture succeeded: ${output.savedUri}"
                     Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                     Log.d(TAG, msg)
+
+
+                    imgPath = output.savedUri!!.path.toString()
+                    var sampleBitmap = ImgUtils.rotateBitmap(imgPath)
+
+                    // resize
+                    val sampleMat = Mat(sampleBitmap.width, sampleBitmap.height, CvType.CV_8UC1)
+                    Utils.bitmapToMat(sampleBitmap, sampleMat)
+
+//                    val NewWidth = 1024.0
+//                    val NewHeight = (sampleBitmap.height * (NewWidth / sampleBitmap.width))
+//                    Imgproc.resize(sampleMat, sampleMat, Size(NewWidth, NewHeight))
+//                    val faceBmp = Bitmap.createBitmap(sampleMat.width(), sampleMat.height(), Bitmap.Config.ARGB_8888)
+//                    Utils.matToBitmap(sampleMat, faceBmp)
+
+                    // face detection
+                    val faceRect = FaceDetection.detect(sampleMat, faceDetector)
+                    var roi = Utilities.crop(sampleMat, faceRect)
+                    val roiBmp = Bitmap.createBitmap(roi.width(), roi.height(), Bitmap.Config.ARGB_8888)
+                    Utils.matToBitmap(roi, roiBmp)
+
+                    viewBinding.photoImageView.visibility = View.VISIBLE
+//                    viewBinding.photoImageView.setImageURI(output.savedUri)
+                    viewBinding.photoImageView.setImageBitmap(roiBmp)
+
+
                 }
             }
         )
     }
-
-
-
+    // This code comes from Google's Getting Started with CameraX manual.
+    // https://developer.android.com/codelabs/camerax-getting-started#3
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
@@ -209,7 +210,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "mFacePAD"
-        private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
+        private const val SAMPLE_FILENAME = "face_image_sample.jpg"
         private val REQUIRED_PERMISSIONS =
             mutableListOf (
                 Manifest.permission.CAMERA,

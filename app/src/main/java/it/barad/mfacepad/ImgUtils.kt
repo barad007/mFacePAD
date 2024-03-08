@@ -4,6 +4,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
+import org.opencv.core.Mat
+import org.opencv.core.MatOfRect
+import org.opencv.core.Rect
+import org.opencv.android.Utils
 
 object ImgUtils {
     fun rotateBitmap(samplePath: String): Bitmap {
@@ -20,4 +24,17 @@ object ImgUtils {
             else -> bitmap
         }
     }
+
+    fun crop(sampleMat: Mat, rectangle : MatOfRect): Mat {
+        val rect = rectangle.toArray()[0]
+        val rectcd = Rect(rect.x, rect.y, rect.width, rect.height)
+        return sampleMat.submat(rectcd)
+    }
+
+    fun matToBitmap(mat: Mat): Bitmap {
+        val bitmap = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(mat, bitmap)
+        return bitmap
+    }
+
 }

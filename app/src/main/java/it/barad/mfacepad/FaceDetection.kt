@@ -6,7 +6,7 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import org.opencv.objdetect.CascadeClassifier
 
-class FaceDetection {
+object FaceDetection {
 
     fun detect(mat: Mat, detector: CascadeClassifier): MatOfRect {
         val rectangle = MatOfRect()
