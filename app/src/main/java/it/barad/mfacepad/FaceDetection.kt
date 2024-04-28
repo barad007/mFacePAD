@@ -11,7 +11,7 @@ object FaceDetection {
     fun detect(mat: Mat, detector: CascadeClassifier): MatOfRect {
         val rectangle = MatOfRect()
         val grayMat = mat.prepare()
-        detector.detectMultiScale(grayMat, rectangle, 1.1, 5, 0, Size(224.0, 224.0), Size())
+        detector.detectMultiScale(grayMat, rectangle, 1.1, 5, 0, Size(100.0, 100.0), Size())
         return rectangle
     }
 

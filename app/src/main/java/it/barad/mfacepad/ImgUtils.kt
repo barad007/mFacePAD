@@ -37,4 +37,30 @@ object ImgUtils {
         return bitmap
     }
 
+    fun centerCrop(mat: Mat, targetSize: Int): Mat {
+        val width = mat.width()
+        val height = mat.height()
+
+        val x = (width - targetSize) / 2
+        val y = (height - targetSize) / 2
+
+        val rect = Rect(x, y, targetSize, targetSize)
+
+        return Mat(mat, rect)
+    }
+
+    fun centerCropInplace(mat: Mat, targetSize: Int) {
+        val width = mat.width()
+        val height = mat.height()
+
+        val x = (width - targetSize) / 2
+        val y = (height - targetSize) / 2
+
+        val rect = Rect(x, y, targetSize, targetSize)
+
+        mat.adjustROI(y, y + targetSize, x, x + targetSize)
+
+        mat.setTo(Mat(mat, rect))
+    }
+
 }

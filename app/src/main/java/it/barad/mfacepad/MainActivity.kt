@@ -1,7 +1,6 @@
 package it.barad.mfacepad
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -19,14 +18,16 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
-import it.barad.mfacepad.Utilities.detectFace
+import it.barad.mfacepad.PAD.calculateMobileNetScore
+import it.barad.mfacepad.PAD.calculateMobileVITScore
 import it.barad.mfacepad.databinding.ActivityMainBinding
+
+import org.pytorch.Module
+
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
 import org.opencv.core.CvType
 import org.opencv.core.Mat
-import org.opencv.core.Size
-import org.opencv.imgproc.Imgproc
 import org.opencv.objdetect.CascadeClassifier
 import java.io.File
 import java.util.concurrent.ExecutorService
@@ -62,7 +63,13 @@ class MainActivity : AppCompatActivity() {
 
     private var faceCascadeClassifier: CascadeClassifier? = null
     lateinit var faceDetector: CascadeClassifier
-    private val fileName = "haarcascade_frontalface_default.xml"
+    private var padMobileNetv3: Module? = null
+    private var mobileNetModel: Module? = null
+    private var padMobileVITv2: Module? = null
+    private var mobileVITModel: Module? = null
+    private val haarcascade = "haarcascade_frontalface_default.xml"
+    private val mobileNetv3 = "PADMobileNetV3_232_224.pt"
+    private val mobileVitv2 =  "PadMobileVITv2_384_256.pt"
     private var imgPath: String = ""
     private var cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
@@ -96,12 +103,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         // OpenCV faceDetector
-        val filePath =  Utilities.getFileFromAssets(this, fileName).absolutePath
+        val filePath =  Utilities.getFileFromAssets(this, haarcascade).absolutePath
         faceDetector = faceCascadeClassifier?: CascadeClassifier(Utilities.createPrivateFile(this, "tmp").apply{writeBytes(File(filePath).readBytes())}.path).also { faceCascadeClassifier = it }
 
+        val mobileNetPath =  Utilities.getFileFromAssets(this, fileName = mobileNetv3).absolutePath
+        padMobileNetv3 = mobileNetModel?: Module.load(mobileNetPath).also { mobileNetModel = it }
+
+        val imgPADModelPath =  Utilities.getFileFromAssets(this, fileName = mobileVitv2).absolutePath
+        padMobileVITv2 = mobileVITModel?: Module.load(imgPADModelPath).also { mobileVITModel = it }
 
     }
-
 
     fun toggleImageViewVisibility(view: View) {
         val currentVisibility = viewBinding.photoImageView.visibility
@@ -144,23 +155,14 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                     Log.d(TAG, msg)
 
-
                     imgPath = output.savedUri!!.path.toString()
 
                     var sampleBitmap = ImgUtils.rotateBitmap(imgPath)
 
-//                    // resize
                     val sampleMat = Mat(sampleBitmap.width, sampleBitmap.height, CvType.CV_8UC1)
                     Utils.bitmapToMat(sampleBitmap, sampleMat)
-//                    val NewWidth = 1024.0
-//                    val NewHeight = (sampleBitmap.height * (NewWidth / sampleBitmap.width))
-//                    Imgproc.resize(sampleMat, sampleMat, Size(NewWidth, NewHeight))
-//                    val faceBmp = Bitmap.createBitmap(sampleMat.width(), sampleMat.height(), Bitmap.Config.ARGB_8888)
-//                    Utils.matToBitmap(sampleMat, faceBmp)
-//                    // face detection
-                    val faceRect = FaceDetection.detect(sampleMat, faceDetector)
 
-//                    val faceRect = Utilities.detectFace(imgPath, faceDetector)
+                    val faceRect = FaceDetection.detect(sampleMat, faceDetector)
 
                     if (faceRect.toArray().size != 1) {
                         val msg = "Face not detected. \nTo obtain a high-quality biometric sample, the face must be clearly visible."
@@ -171,18 +173,31 @@ class MainActivity : AppCompatActivity() {
                         val roiBmp = Bitmap.createBitmap(roi.width(), roi.height(), Bitmap.Config.ARGB_8888)
                         Utils.matToBitmap(roi, roiBmp)
 
+                        var MobileNETScore = padMobileNetv3?.let { calculateMobileNetScore(roi, it) }
+
+                        var MobileVITScore = padMobileVITv2?.let { calculateMobileVITScore(roi, it) }
+
                         viewBinding.photoImageView.visibility = View.VISIBLE
                         viewBinding.goBackButton.visibility = View.VISIBLE
                         viewBinding.viewFinder.visibility = View.INVISIBLE
-//                    viewBinding.photoImageView.setImageURI(output.savedUri)
                         viewBinding.photoImageView.setImageBitmap(roiBmp)
                         viewBinding.bottomTextView.visibility = View.VISIBLE
-                        viewBinding.bottomTextView.text = "score = 0.84"
 
+                        val mobileNETScore = String.format("%.4f", MobileNETScore)
+                        val mobileVITScore = String.format("%.4f", MobileVITScore)
+
+                        val mobileNetTH = 0.27 // EER threshold
+                        val mobileVITTH = 0.13 // EER threshold
+                        val mobileNetDcision = if (MobileNETScore!! < mobileNetTH) "Reject" else "Accept"
+                        val mobileVITDecision = if (MobileVITScore!! < mobileVITTH) "Reject" else "Accept"
+
+                        val message = "MobileNET score: $mobileNETScore\n" +
+                                "MobileNET Decision: $mobileNetDcision\n " +
+                                "MobileVIT score: $mobileVITScore\n" +
+                                "MobileVIT Decision: $mobileVITDecision"
+
+                        viewBinding.bottomTextView.text = message
                     }
-
-
-
                 }
             }
         )
