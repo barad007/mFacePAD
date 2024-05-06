@@ -173,9 +173,17 @@ class MainActivity : AppCompatActivity() {
                         val roiBmp = Bitmap.createBitmap(roi.width(), roi.height(), Bitmap.Config.ARGB_8888)
                         Utils.matToBitmap(roi, roiBmp)
 
+                        val padTime0 = System.currentTimeMillis()
+
                         var MobileNETScore = padMobileNetv3?.let { calculateMobileNetScore(roi, it) }
 
+                        Log.d("padMobileNetv3","PAD time: ${System.currentTimeMillis()-padTime0} ms")
+
+                        val padTime = System.currentTimeMillis()
+
                         var MobileVITScore = padMobileVITv2?.let { calculateMobileVITScore(roi, it) }
+
+                        Log.d("padMobileVITv2","PAD time: ${System.currentTimeMillis()-padTime} ms")
 
                         viewBinding.photoImageView.visibility = View.VISIBLE
                         viewBinding.goBackButton.visibility = View.VISIBLE
@@ -188,6 +196,7 @@ class MainActivity : AppCompatActivity() {
 
                         val mobileNetTH = 0.27 // EER threshold
                         val mobileVITTH = 0.13 // EER threshold
+
                         val mobileNetDcision = if (MobileNETScore!! < mobileNetTH) "Reject" else "Accept"
                         val mobileVITDecision = if (MobileVITScore!! < mobileVITTH) "Reject" else "Accept"
 
